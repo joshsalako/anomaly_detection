@@ -1286,3 +1286,5 @@ if 'date' in df.columns and 'Name' in df.columns:
     
     plt.tight_layout()
     plt.show()
+
+# %%
