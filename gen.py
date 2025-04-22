@@ -28,9 +28,9 @@ def load_csv(file_path):
     return df
 # %%
 # Load exchange rate data
-usd_kes = pd.read_csv('USD_KES Historical Data.csv', sep=',')
-usd_ngn = pd.read_csv('USD_NGN Historical Data.csv', sep=',')
-usd_zar = pd.read_csv('USD_ZAR Historical Data.csv', sep=',')
+usd_kes = pd.read_csv('datasets/USD_KES Historical Data.csv', sep=',')
+usd_ngn = pd.read_csv('datasets/USD_NGN Historical Data.csv', sep=',')
+usd_zar = pd.read_csv('datasets/USD_ZAR Historical Data.csv', sep=',')
 
 # Clean up exchange rate data
 for df in [usd_kes, usd_ngn, usd_zar]:
@@ -39,8 +39,11 @@ for df in [usd_kes, usd_ngn, usd_zar]:
     df['Price'] = df['Price'].apply(lambda x: float(x.strip('"').replace(',', '')) if isinstance(x, str) else float(x))
 # %%
 # List of stock files
-stock_files = ['ANG.csv', 'DANGCEM.csv', 'GTCO.csv', 'MTN.csv', 'MTNN.csv', 
-               'NB.csv', 'NPN.csv', 'SBK.csv', 'SCOM.csv', 'SOL.csv', 'ZENITHBANK.csv']
+stock_files = ['datasets/ANG.csv', 'datasets/DANGCEM.csv', 
+               'datasets/GTCO.csv', 'datasets/MTN.csv', 'datasets/MTNN.csv', 
+               'datasets/NB.csv', 'datasets/NPN.csv', 'datasets/SBK.csv', 
+               'datasets/SCOM.csv', 'datasets/SOL.csv', 'datasets/ZENITHBANK.csv'
+               ]
 
 # Dictionary mapping stock to currency
 stock_currency = {
@@ -116,7 +119,7 @@ combined_df = pd.concat(dfs, ignore_index=True)
 combined_df = combined_df.sort_values(by='Date')
 # %%
 # Save to CSV
-combined_df.to_csv('africa_stock_5yrs.csv', index=False)
+combined_df.to_csv('datasets/africa_stock_5yrs.csv', index=False)
 
 print("Processing complete. Output saved to africa_stock_5yrs.csv")
 
