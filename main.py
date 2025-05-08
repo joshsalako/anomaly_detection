@@ -28,6 +28,7 @@ from sklearn.model_selection import RandomizedSearchCV
 from scipy.stats import randint, uniform
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
+from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 
 # Set style for plots
 plt.style.use('seaborn')
@@ -619,7 +620,6 @@ if X_scaled.shape[1] > 1:  # If more than 1 dimension, use PCA for visualization
                 edgecolors='r', facecolors='none', s=80, label='Anomalies')
     plt.title('GMM Anomaly Detection')
     plt.legend()
-    plt.show()
 
 # %%
 # 5. Autoencoder hyperparameter tuning
@@ -747,7 +747,6 @@ if best_config[0][0] == 2:  # If encoding dimension is 2
     plt.xlabel('Latent Dimension 1')
     plt.ylabel('Latent Dimension 2')
     plt.legend()
-    plt.show()
 
 # Compare original and reconstructed values for anomalies
 plt.figure(figsize=(20, 15))
@@ -1286,5 +1285,161 @@ if 'date' in df.columns and 'Name' in df.columns:
     
     plt.tight_layout()
     plt.show()
+
+# %%
+# Hierarchical Clustering Analysis
+from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Prepare data for hierarchical clustering
+# Use log-transformed closing prices
+price_data = df.pivot(index='date', columns='Name', values='log_close')
+price_data = price_data.fillna(method='ffill')  # Forward fill missing values
+
+# Standardize the data
+scaler = StandardScaler()
+price_data_scaled = scaler.fit_transform(price_data)
+
+# Perform hierarchical clustering
+# Try different linkage methods
+linkage_methods = ['ward', 'complete', 'average', 'single']
+plt.figure(figsize=(20, 15))
+
+for i, method in enumerate(linkage_methods, 1):
+    plt.subplot(2, 2, i)
+    Z = linkage(price_data_scaled.T, method=method)
+    dendrogram(Z, labels=price_data.columns, leaf_rotation=90)
+    plt.title(f'Hierarchical Clustering Dendrogram ({method.capitalize()} Linkage)')
+    plt.xlabel('Stocks')
+    plt.ylabel('Distance')
+
+plt.tight_layout()
+plt.show()
+
+# Choose the best linkage method (ward is often good for financial data)
+best_method = 'ward'
+Z = linkage(price_data_scaled.T, method=best_method)
+
+# Plot a more detailed dendrogram
+plt.figure(figsize=(15, 10))
+dendrogram(Z, labels=price_data.columns, leaf_rotation=90, 
+          truncate_mode='level', p=5)  # Show only top 5 levels
+plt.title('Detailed Hierarchical Clustering Dendrogram (Ward Linkage)')
+plt.xlabel('Stocks')
+plt.ylabel('Distance')
+plt.tight_layout()
+plt.show()
+
+# Determine optimal number of clusters using elbow method
+last = Z[-10:, 2]
+last_rev = last[::-1]
+idxs = np.arange(1, len(last) + 1)
+plt.figure(figsize=(10, 6))
+plt.plot(idxs, last_rev)
+plt.title('Elbow Method for Optimal Number of Clusters')
+plt.xlabel('Number of Clusters')
+plt.ylabel('Distance')
+plt.grid(True)
+plt.show()
+
+# Choose number of clusters (you can adjust this based on the elbow plot)
+n_clusters = 5
+clusters = fcluster(Z, n_clusters, criterion='maxclust')
+
+# Create a DataFrame with cluster assignments
+cluster_df = pd.DataFrame({
+    'Stock': price_data.columns,
+    'Cluster': clusters
+})
+
+# Visualize clusters in PCA space
+pca = PCA(n_components=2)
+price_pca = pca.fit_transform(price_data_scaled.T)
+
+plt.figure(figsize=(12, 8))
+scatter = plt.scatter(price_pca[:, 0], price_pca[:, 1], c=clusters, cmap='viridis', s=100)
+plt.colorbar(scatter, label='Cluster')
+
+# Add stock labels
+for i, stock in enumerate(price_data.columns):
+    plt.annotate(stock, (price_pca[i, 0], price_pca[i, 1]), 
+                 xytext=(5, 5), textcoords='offset points')
+
+plt.title('Stock Clusters in PCA Space')
+plt.xlabel(f'PC1 ({pca.explained_variance_ratio_[0]:.2%} variance)')
+plt.ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.2%} variance)')
+plt.grid(True, alpha=0.3)
+plt.show()
+
+# Analyze cluster characteristics
+cluster_stats = pd.DataFrame()
+for cluster in range(1, n_clusters + 1):
+    cluster_stocks = cluster_df[cluster_df['Cluster'] == cluster]['Stock']
+    cluster_data = price_data[cluster_stocks]
+    
+    # Calculate statistics
+    stats = {
+        'Mean Return': cluster_data.mean().mean(),
+        'Volatility': cluster_data.std().mean(),
+        'Size': len(cluster_stocks),
+        'Stocks': ', '.join(cluster_stocks)
+    }
+    cluster_stats[f'Cluster {cluster}'] = pd.Series(stats)
+
+print("\nCluster Characteristics:")
+print(cluster_stats)
+
+# Visualize cluster characteristics
+plt.figure(figsize=(15, 10))
+
+# Plot 1: Mean Returns by Cluster
+plt.subplot(2, 2, 1)
+cluster_returns = [price_data[cluster_df[cluster_df['Cluster'] == i]['Stock']].mean().mean() 
+                  for i in range(1, n_clusters + 1)]
+plt.bar(range(1, n_clusters + 1), cluster_returns)
+plt.title('Mean Returns by Cluster')
+plt.xlabel('Cluster')
+plt.ylabel('Mean Return')
+
+# Plot 2: Volatility by Cluster
+plt.subplot(2, 2, 2)
+cluster_vol = [price_data[cluster_df[cluster_df['Cluster'] == i]['Stock']].std().mean() 
+               for i in range(1, n_clusters + 1)]
+plt.bar(range(1, n_clusters + 1), cluster_vol)
+plt.title('Volatility by Cluster')
+plt.xlabel('Cluster')
+plt.ylabel('Volatility')
+
+# Plot 3: Cluster Sizes
+plt.subplot(2, 2, 3)
+cluster_sizes = [len(cluster_df[cluster_df['Cluster'] == i]) for i in range(1, n_clusters + 1)]
+plt.pie(cluster_sizes, labels=[f'Cluster {i}' for i in range(1, n_clusters + 1)], 
+        autopct='%1.1f%%')
+plt.title('Cluster Sizes')
+
+# Plot 4: Time Series of Cluster Means
+plt.subplot(2, 2, 4)
+for cluster in range(1, n_clusters + 1):
+    cluster_stocks = cluster_df[cluster_df['Cluster'] == cluster]['Stock']
+    cluster_mean = price_data[cluster_stocks].mean(axis=1)
+    plt.plot(cluster_mean, label=f'Cluster {cluster}')
+plt.title('Cluster Mean Time Series')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+# Create a heatmap of stock correlations within clusters
+plt.figure(figsize=(15, 12))
+correlation_matrix = price_data.corr()
+sns.heatmap(correlation_matrix, cmap='coolwarm', center=0, 
+            xticklabels=True, yticklabels=True)
+plt.title('Stock Correlation Heatmap')
+plt.xticks(rotation=90)
+plt.yticks(rotation=0)
+plt.tight_layout()
+plt.show()
 
 # %%
